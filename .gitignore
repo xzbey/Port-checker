@@ -1,0 +1,5 @@
+/build/*
+/.qtcreator/*
+/.git/*
+*.bak
+realList.json

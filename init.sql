@@ -1,0 +1,9 @@
+CREATE TABLE metrics(
+	metrics_id SERIAL PRIMARY KEY,
+	info TEXT NOT NULL,
+	ip INET NOT NULL,
+	port INT NOT NULL CHECK (port BETWEEN 1 AND 65535),
+	status BOOL NOT NULL,
+	latency BIGINT,
+	ts TIMESTAMPTZ DEFAULT (now() AT TIME ZONE 'Europe/Moscow')
+);
