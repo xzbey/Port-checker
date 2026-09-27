@@ -4,13 +4,27 @@
 #include <QHostAddress>
 #include <QDateTime>
 
+namespace Config {
+    inline const QString dbType = "QPSQL";
+    inline const QString ip = "127.0.0.1";
+    inline constexpr quint16 port = 5432;
+    inline const QString dbName = "postgres";
+    inline const QString userName = "postgres";
+    inline const QString password = "mysecretpassword";
+
+    inline constexpr int threadsCount = 8;
+    inline constexpr int delay = 1000;
+    inline constexpr int cleanupTime = 3000;
+    inline constexpr int reconnectTime = 5000;
+}
+
 struct BaseInfo {
     BaseInfo() = default;
 
-    BaseInfo(const quint16& id, const QString& info, const QHostAddress& ip, const quint16& port):
+    BaseInfo(const int& id, const QString& info, const QHostAddress& ip, const quint16& port):
         id(id), info(info), ip(ip), port(port) {}
 
-    quint16 id;
+    int id;
     QString info;
     QHostAddress ip;
     quint16 port;
@@ -22,7 +36,7 @@ struct FullInfo: public BaseInfo {
     FullInfo(const BaseInfo& baseInfo, const bool& status, const quint64& latency, const QDateTime& last_checked):
         BaseInfo(baseInfo), status(status), latency(latency), last_checked(last_checked) {}
 
-    FullInfo(const quint16& id, const QString& info, const QHostAddress& ip, const quint16& port,
+    FullInfo(const int& id, const QString& info, const QHostAddress& ip, const quint16& port,
                 const bool& status, const quint64& latency, const QDateTime& last_checked):
         BaseInfo(id, info, ip, port), status(status), latency(latency), last_checked(last_checked) {}
 

@@ -22,7 +22,9 @@ void HostChecker::run() {
     quint64 latency = timer.elapsed();
 
     if (!status)
-        latency = NULL;
+        latency = 0;
+
+    socket.close();
 
     emit finished(FullInfo(baseInfo, status, latency, last_checked));
 }

@@ -10,10 +10,9 @@ qt_add_executable(Port-checker
     WIN32 MACOSX_BUNDLE
     main.cpp
     gui/MainWindow.cpp gui/MainWindow.h gui/MainWindow.ui
-    common/list.json
     hostchecker/HostChecker.h hostchecker/HostChecker.cpp
     common/Common.h
-    common/resources.qrc
+    db/DBService.h db/DBService.cpp
 )
 
 target_link_libraries(Port-checker
@@ -28,6 +27,7 @@ target_include_directories(Port-checker
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/gui
         ${CMAKE_CURRENT_SOURCE_DIR}/hostchecker
+        ${CMAKE_CURRENT_SOURCE_DIR}/db
         ${CMAKE_SOURCE_DIR}/common
 )
 

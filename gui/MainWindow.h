@@ -7,6 +7,7 @@
 #include <QSqlDatabase>
 
 #include "HostChecker.h"
+#include "DBService.h"
 
 QT_BEGIN_NAMESPACE
 namespace Ui {
@@ -22,32 +23,41 @@ public:
     MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
 
-    bool downloadHostList(const QString& path);
-
-    void loadJson();
-
-    QVector<QSharedPointer<BaseInfo>> getHostList() const;
-
     void print(const FullInfo& fullInfo) const;
 
     void setTable();
 
-    QSqlDatabase createDbConnection(const QString& dbType, const QString& ip, const quint16& port,
-                            const QString& dbName, const QString& userName, const QString& password) const;
+    bool dialogForm(BaseInfo& outInfo);
+
+    void dbIsOpen();
 
 public slots:
     void onHostCheckerFinished(const FullInfo& fullInfo);
 
     void startPool();
 
+private slots:
+    void on_addHost_clicked();
+
+    void on_deleteHost_clicked();
+
+    void on_clearMetrics_clicked();
+
+    void on_clearArchive_clicked();
+
 private:
     Ui::MainWindow *ui;
 
     QVector<QSharedPointer<BaseInfo>> hostList;
-    QTimer* timer;
+    QHash<int, int> rowByHostId;
 
-    QSqlQuery insertQuery;
-    bool dbReady = false;
+    QTimer* timer,
+        *cleanupTimer,
+        *reconnectTimer;
 
+    DBService dbservice;
+
+protected:
+    void closeEvent(QCloseEvent *event) override;
 };
 #endif // MAINWINDOW_H

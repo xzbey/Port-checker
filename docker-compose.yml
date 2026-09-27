@@ -4,6 +4,9 @@ services:
     container_name: postgres-dev
     environment:
       POSTGRES_PASSWORD: mysecretpassword
+      TZ: Europe/Moscow
+    command:
+      postgres -c timezone=Europe/Moscow
     ports:
       - "5432:5432"
     volumes:

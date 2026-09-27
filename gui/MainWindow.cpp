@@ -1,5 +1,5 @@
-#include "mainwindow.h"
-#include "ui_mainwindow.h"
+#include "MainWindow.h"
+#include "ui_MainWindow.h"
 
 #include <QFile>
 #include <QJsonDocument>
@@ -12,7 +12,14 @@
 #include <QThreadPool>
 #include <QTimer>
 
-#include <QSqlError>
+#include <QDialog>
+#include <QFormLayout>
+#include <QLineEdit>
+#include <QSpinBox>
+#include <QDialogButtonBox>
+
+#include <QMessageBox>
+
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -20,74 +27,27 @@ MainWindow::MainWindow(QWidget *parent)
 {
     ui->setupUi(this);
     qRegisterMetaType<FullInfo>("FullInfo");
+    connect(&dbservice, &DBService::errorOccurred, this, [](const QString& msg){ qDebug() << msg; });
 
-    loadJson();
+    if (dbservice.connect(Config::dbType, Config::ip, Config::port,
+                           Config::dbName, Config::userName, Config::password)) {
+        hostList = dbservice.loadHosts();
+        setTable();
+    }
 
-    setTable();
-
-    QThreadPool::globalInstance()->setMaxThreadCount(8);
+    QThreadPool::globalInstance()->setMaxThreadCount(Config::threadsCount);
 
     timer = new QTimer(this);
     connect(timer, &QTimer::timeout, this, &MainWindow::startPool);
-    timer->start(1000);
+    timer->start(Config::delay);
 
-    QSqlDatabase db = createDbConnection("QPSQL", "127.0.0.1", 5432,
-                                        "postgres", "postgres", "mysecretpassword");
-    if (!db.open())
-        qDebug() << "Data base connection error:" << db.lastError().text();
-    else {
-        qDebug() << "Successful connect to PostgreSQL";
-        insertQuery = QSqlQuery(db);
-        dbReady = insertQuery.prepare("INSERT INTO metrics (info, ip, port, status, latency, ts)"
-                                 "VALUES (:info, :ip, :port, :status, :latency, :ts)");
-        if (!dbReady)
-            qDebug() << "Prepare error:" << insertQuery.lastError().text();
-    }
-}
+    cleanupTimer = new QTimer(this);
+    connect(cleanupTimer, &QTimer::timeout, &dbservice, &DBService::runCleanup);
+    cleanupTimer->start(Config::cleanupTime);
 
-
-bool MainWindow::downloadHostList(const QString& path) {
-    QFile file(path);
-    if (!file.open(QIODevice::ReadOnly)) {
-        qDebug() << "Open file error:" << file.errorString();
-        return false;
-    }
-
-    QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
-
-    file.close();
-    if (doc.isNull() or !doc.isArray()) {
-        qDebug() << "File is null or isnt array";
-        return false;
-    }
-
-    QJsonArray array = doc.array();
-
-    QJsonObject item;
-    quint16 id = 0;
-    for (const QJsonValue& value: array) {
-        item = value.toObject();
-
-        QSharedPointer<BaseInfo> info = QSharedPointer<BaseInfo>::create(
-            id++,
-            item["info"].toString(),
-            QHostAddress(item["ip"].toString()),
-            static_cast<quint16>(item["port"].toString().toInt())
-        );
-
-        hostList.append(info);
-    }
-
-    return true;
-}
-
-void MainWindow::loadJson() {
-    QString path = ":/list.json";
-    // qDebug() << QDir(":/").entryList();
-    if (!downloadHostList(path)) {
-        qDebug() << "Failed to parse";
-        close();
-    }
+    reconnectTimer = new QTimer(this);
+    connect(reconnectTimer, &QTimer::timeout, this, &MainWindow::dbIsOpen);
+    reconnectTimer->start(Config::reconnectTime);
 }
 
 void MainWindow::startPool() {
@@ -98,29 +58,14 @@ void MainWindow::startPool() {
     }
 }
 
-QVector<QSharedPointer<BaseInfo>> MainWindow::getHostList() const{
-    return hostList;
-}
-
 void MainWindow::onHostCheckerFinished(const FullInfo& fullInfo) {
-    // print(fullInfo);
+    int row = rowByHostId.value(fullInfo.id, -1);
+    if (row == -1) return;
 
     for (int i = 0; i < ui->InfoTable->columnCount(); i++)
-        ui->InfoTable->item(fullInfo.id, i)->setText(fullInfo[i]);
+        ui->InfoTable->item(row, i)->setText(fullInfo[i]);
 
-    if (dbReady) {
-        insertQuery.bindValue(":info", fullInfo.info);
-        insertQuery.bindValue(":ip", fullInfo.ip.toString());
-        insertQuery.bindValue(":port", fullInfo.port);
-        insertQuery.bindValue(":status", fullInfo.status);
-        insertQuery.bindValue(":latency", fullInfo.latency);
-        insertQuery.bindValue(":ts", fullInfo.last_checked);
-
-        if (!insertQuery.exec())
-            qDebug() << "Insert error:" << insertQuery.lastError().text();
-        // else
-        //     qDebug() << "Successful insert in db";
-    }
+    dbservice.writeCheckResults(fullInfo);
 }
 
 void MainWindow::print(const FullInfo& fullInfo) const {
@@ -130,6 +75,7 @@ void MainWindow::print(const FullInfo& fullInfo) const {
 }
 
 void MainWindow::setTable() {
+    rowByHostId.clear();
     ui->InfoTable->setRowCount(hostList.size());
     ui->InfoTable->setColumnCount(5);
 
@@ -139,24 +85,114 @@ void MainWindow::setTable() {
     ui->InfoTable->horizontalHeader()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
     ui->InfoTable->horizontalHeader()->setSectionResizeMode(4, QHeaderView::Stretch);
 
-    for (int row = 0; row < hostList.size(); row++)
+    for (int row = 0; row < hostList.size(); row++) {
         for (int col = 0; col < 5; col++)
             ui->InfoTable->setItem(row, col, new QTableWidgetItem("..."));
+
+        rowByHostId[hostList[row]->id] = row;
+    }
 }
 
-QSqlDatabase MainWindow::createDbConnection(const QString& dbType, const QString& ip, const quint16& port,
-                                    const QString& dbName, const QString& userName, const QString& password) const {
-    QSqlDatabase db = QSqlDatabase::addDatabase(dbType);
-    db.setHostName(ip);
-    db.setPort(port);
-    db.setDatabaseName(dbName);
-    db.setUserName(userName);
-    db.setPassword(password);
+bool MainWindow::dialogForm(BaseInfo& outInfo) {
+    QDialog dialog(this);
+    dialog.setWindowTitle("Параметры хоста");
+    dialog.setMinimumSize(180, 130);
 
-    return db;
+    QFormLayout form(&dialog);
+
+    QLineEdit infoEdit(&dialog);
+    form.addRow("Info:", &infoEdit);
+
+    QLineEdit ipEdit(&dialog);
+    form.addRow("Ip:", &ipEdit);
+
+    QSpinBox portEdit(&dialog);
+    portEdit.setRange(1, 65535);
+    portEdit.setValue(1);
+    form.addRow("Port:", &portEdit);
+
+    QDialogButtonBox btnBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    form.addRow(&btnBox);
+
+    connect(&btnBox, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(&btnBox, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+
+    if (dialog.exec() == QDialog::Accepted) {
+        outInfo = BaseInfo{
+                           -1,
+                           infoEdit.text(),
+                           QHostAddress(ipEdit.text()),
+                           static_cast<quint16>(portEdit.value())
+                        };
+        return true;
+    } else return false;
 }
+
+void MainWindow::dbIsOpen() {
+    if (dbservice.isOpen()) return;
+
+    qDebug() << "Reconnect...";
+
+    if (!dbservice.reconnect()) {
+        qDebug() << "Fail in reconnect";
+        return;
+    }
+
+    hostList = dbservice.loadHosts();
+    setTable();
+    qDebug() << "Successful reconnect!";
+}
+
+void MainWindow::on_addHost_clicked()
+{
+    BaseInfo tempInfo;
+    if (!dialogForm(tempInfo))
+        return;
+
+    if (!dbservice.addHost(tempInfo.info, tempInfo.ip, tempInfo.port))
+        return;
+
+    hostList = dbservice.loadHosts();
+    setTable();
+}
+
+void MainWindow::on_deleteHost_clicked()
+{
+    int row = ui->InfoTable->currentRow();
+    if (row == -1) return;
+
+    dbservice.removeHost(hostList[row]->id);
+
+    hostList = dbservice.loadHosts();
+    setTable();
+}
+
+void MainWindow::on_clearMetrics_clicked()
+{
+    if (dbservice.deleteMetrics())
+        QMessageBox::information(this, "Очистка metrics", "Успешная очистка metrics!");
+    else
+        QMessageBox::critical(this, "Очистка metrics", "Ошибка при очистке metrics!");
+}
+
+
+void MainWindow::on_clearArchive_clicked()
+{
+    if (dbservice.deleteArchive())
+        QMessageBox::information(this, "Очистка archive", "Успешная очистка archive!");
+    else
+        QMessageBox::critical(this, "Очистка archive", "Ошибка при очистке archive!");
+}
+
 
 MainWindow::~MainWindow()
 {
     delete ui;
+}
+
+void MainWindow::closeEvent(QCloseEvent *event) {
+    timer->stop();
+    QThreadPool::globalInstance()->clear();
+    QThreadPool::globalInstance()->waitForDone();
+    QMainWindow::closeEvent(event);
 }
