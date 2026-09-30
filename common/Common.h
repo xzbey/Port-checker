@@ -77,6 +77,4 @@ struct FullInfo: public BaseInfo {
     QDateTime last_checked;
 };
 
-Q_DECLARE_METATYPE(FullInfo)
-
 #endif // COMMON_H

@@ -30,7 +30,6 @@ MainWindow::MainWindow(QWidget *parent)
     , ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
-    qRegisterMetaType<FullInfo>("FullInfo");
     connect(&dbservice, &DBService::errorOccurred, this, [](const QString& msg){ qDebug() << msg; });
 
     if (dbservice.connect(Config::dbType, Config::ip, Config::port,
@@ -201,7 +200,7 @@ bool MainWindow::selectTableForm(QVector<QString>& tables, int& selectIndex) {
 
 void MainWindow::showTable(QString& tableName) {
     QDialog dialog(this);
-    dialog.setWindowTitle("Выбор таблицы");
+    dialog.setWindowTitle(tableName);
     dialog.setMinimumSize(180, 130);
 
     QFormLayout form(&dialog);
@@ -210,7 +209,7 @@ void MainWindow::showTable(QString& tableName) {
     tableView.setModel(dbservice.getModel(&dialog, tableName));
     tableView.resizeColumnsToContents();
     tableView.setEditTriggers(QAbstractItemView::NoEditTriggers);
-    tableView.verticalHeader()->setVisible(false);
+    // tableView.verticalHeader()->setVisible(false);
     form.addRow(&tableView);
 
     dialog.resize(tableView.horizontalHeader()->length() + 50, 180);
@@ -281,9 +280,13 @@ void MainWindow::on_changeClearRules_clicked()
     Time time;
     if (clearRuleForm(time)) {
         QString retain_for = time.Get();
-        QMessageBox::information(this, "Изменение времени удаления метрик",
-                                "Успешное изменение времени удаления метрик!\nПолучено значение: " + retain_for);
-        dbservice.updateClearRules(hostList[row]->id, retain_for);
+
+        if (dbservice.updateClearRules(hostList[row]->id, retain_for))
+            QMessageBox::information(this, "Изменение времени удаления метрик",
+                                           "Успешное изменение времени удаления метрик!\nПолучено значение: " + retain_for);
+        else
+            QMessageBox::critical(this, "Изменение времени удаления метрик",
+                                        "Ошибка при изменении времени удаления метрик!\nПолучено значение: " + retain_for);
     }
 }
 

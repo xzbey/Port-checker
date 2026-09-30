@@ -25,7 +25,7 @@ QVector<QSharedPointer<BaseInfo>> DBService::loadHosts() {
     QSqlQuery query = QSqlQuery(db);
     QVector<QSharedPointer<BaseInfo>> result;
 
-    if (!query.exec("SELECT * FROM hosts")) {
+    if (!query.exec("SELECT * FROM hosts ORDER BY hosts_id")) {
         emit errorOccurred(query.lastError().text());
         return result;
     }
@@ -71,7 +71,16 @@ bool DBService::createQueries() {
     }
 
     deleteHostsQuery = QSqlQuery(db);
-    if (!deleteHostsQuery.prepare("DELETE FROM hosts "
+    if (!deleteHostsQuery.prepare("WITH moved AS ("
+                                  "   DELETE FROM metrics m "
+                                  "   WHERE m.hosts_id = :hosts_id "
+                                  "   RETURNING m.hosts_id, m.status, m.latency, m.ts"
+                                  "), archived AS ("
+                                  "   INSERT INTO archive (info, ip, port, status, latency, ts) "
+                                  "   SELECT h.info, h.ip, h.port, moved.status, moved.latency, moved.ts "
+                                  "   FROM hosts h JOIN moved USING(hosts_id)"
+                                  ") "
+                                  "DELETE FROM hosts "
                                   "WHERE hosts_id = :hosts_id")) {
         emit errorOccurred(deleteHostsQuery.lastError().text());
         return false;
@@ -146,10 +155,10 @@ bool DBService::writeCheckResults(const FullInfo& fullInfo) {
     insertMetricsQuery.bindValue(":latency", fullInfo.latency);
     insertMetricsQuery.bindValue(":ts", fullInfo.last_checked);
     if (!insertMetricsQuery.exec()) {
-        if (insertMetricsQuery.lastError().type() == QSqlError::ConnectionError)
-            db.close();
         emit errorOccurred(insertMetricsQuery.lastError().text());
         db.rollback();
+        if (insertMetricsQuery.lastError().type() == QSqlError::ConnectionError)
+            db.close();
         return false;
     }
 
