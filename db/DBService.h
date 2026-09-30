@@ -8,6 +8,8 @@
 
 #include <QSharedPointer>
 
+#include <QSqlTableModel>
+
 #include "Common.h"
 
 class DBService: public QObject
@@ -30,8 +32,12 @@ public:
     bool deleteMetrics();
     bool deleteArchive();
 
+    bool updateClearRules(const int& hosts_id, const QString& retain_for);
+
     bool isOpen() const;
     bool reconnect();
+
+    QSqlTableModel* getModel(QObject* parent, QString& tableName);
 
 signals:
     void errorOccurred(const QString& msg);
@@ -40,6 +46,7 @@ private:
     QSqlDatabase db;
     QSqlQuery insertMetricsQuery,
         updateHostStatusQuery,
+        updateClearRulesQuery,
         insertHostsQuery,
         insertHostStatusQuery,
         insertClearRulesQuery,

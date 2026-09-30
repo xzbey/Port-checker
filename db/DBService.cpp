@@ -127,6 +127,14 @@ bool DBService::createQueries() {
         return false;
     }
 
+    updateClearRulesQuery = QSqlQuery(db);
+    if (!updateClearRulesQuery.prepare("UPDATE clear_rules "
+                                       "SET retain_for = :retain_for "
+                                       "WHERE hosts_id = :hosts_id")) {
+        emit errorOccurred(updateClearRulesQuery.lastError().text());
+        return false;
+    }
+
     return true;
 }
 
@@ -234,6 +242,19 @@ bool DBService::deleteArchive() {
     return db.commit();
 }
 
+bool DBService::updateClearRules(const int& hosts_id, const QString& retain_for) {
+    db.transaction();
+
+    updateClearRulesQuery.bindValue(":hosts_id", hosts_id);
+    updateClearRulesQuery.bindValue(":retain_for", retain_for);
+    if(!updateClearRulesQuery.exec()) {
+        emit errorOccurred(updateClearRulesQuery.lastError().text());
+        db.rollback();
+        return false;
+    }
+    return db.commit();
+}
+
 bool DBService::isOpen() const {
     return db.isOpen();
 }
@@ -245,4 +266,12 @@ bool DBService::reconnect() {
     }
 
     return createQueries();
+}
+
+QSqlTableModel* DBService::getModel(QObject* parent, QString& tableName) {
+    QSqlTableModel* model = new QSqlTableModel(parent, db);
+    model->setTable(tableName);
+    model->select();
+
+    return model;
 }

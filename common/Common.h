@@ -18,6 +18,14 @@ namespace Config {
     inline constexpr int reconnectTime = 5000;
 }
 
+struct Time {
+    int h, m, s;
+
+    QString Get() {
+        return QString::number(h) + ":" + QString::number(m) + ":" + QString::number(s);
+    }
+};
+
 struct BaseInfo {
     BaseInfo() = default;
 

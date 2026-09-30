@@ -27,7 +27,10 @@ public:
 
     void setTable();
 
-    bool dialogForm(BaseInfo& outInfo);
+    bool addHostForm(BaseInfo& outInfo);
+    bool clearRuleForm(Time& time);
+    bool selectTableForm(QVector<QString>& tables, int& selectIndex);
+    void showTable(QString& tableName);
 
     void dbIsOpen();
 
@@ -44,6 +47,10 @@ private slots:
     void on_clearMetrics_clicked();
 
     void on_clearArchive_clicked();
+
+    void on_changeClearRules_clicked();
+
+    void on_selectTable_clicked();
 
 private:
     Ui::MainWindow *ui;

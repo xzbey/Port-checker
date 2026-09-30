@@ -17,8 +17,12 @@
 #include <QLineEdit>
 #include <QSpinBox>
 #include <QDialogButtonBox>
+#include <QLabel>
 
 #include <QMessageBox>
+#include <QInputDialog>
+#include <QComboBox>
+#include <QTableView>
 
 
 MainWindow::MainWindow(QWidget *parent)
@@ -93,7 +97,7 @@ void MainWindow::setTable() {
     }
 }
 
-bool MainWindow::dialogForm(BaseInfo& outInfo) {
+bool MainWindow::addHostForm(BaseInfo& outInfo) {
     QDialog dialog(this);
     dialog.setWindowTitle("Параметры хоста");
     dialog.setMinimumSize(180, 130);
@@ -128,6 +132,91 @@ bool MainWindow::dialogForm(BaseInfo& outInfo) {
     } else return false;
 }
 
+bool MainWindow::clearRuleForm(Time& time) {
+    QDialog dialog(this);
+    dialog.setWindowTitle("Изменение времени удаления метрик");
+    dialog.setMinimumSize(180, 130);
+
+    QFormLayout form(&dialog);
+
+    QLabel label("Введите новое время удаления", &dialog);
+    form.addRow(&label);
+
+    QSpinBox hoursEdit(&dialog);
+    hoursEdit.setRange(0, 23);
+    hoursEdit.setValue(0);
+    form.addRow("Часы:", &hoursEdit);
+
+    QSpinBox minutesEdit(&dialog);
+    minutesEdit.setRange(0, 59);
+    minutesEdit.setValue(0);
+    form.addRow("Минуты:", &minutesEdit);
+
+    QSpinBox secondsEdit(&dialog);
+    secondsEdit.setRange(0, 59);
+    secondsEdit.setValue(0);
+    form.addRow("Секунды:", &secondsEdit);
+
+    QDialogButtonBox btnBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    form.addRow(&btnBox);
+
+    connect(&btnBox, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(&btnBox, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+
+    if (dialog.exec() == QDialog::Accepted) {
+        time.h = hoursEdit.value(),
+        time.m = minutesEdit.value(),
+        time.s = secondsEdit.value();
+        // qDebug() << h << m << s;
+        if (time.h == 0 and time.m == 0 and time.s == 0) {
+            QMessageBox::critical(this, "Изменение времени удаления метрик", "Ошибка при изменении времени!\nВсе значения равны 0!");
+            return false;
+        }
+        return true;
+    } else return false;
+}
+
+bool MainWindow::selectTableForm(QVector<QString>& tables, int& selectIndex) {
+    QDialog dialog(this);
+    dialog.setWindowTitle("Выбор таблицы");
+    dialog.setMinimumSize(180, 130);
+
+    QFormLayout form(&dialog);
+
+    QComboBox comboBox(&dialog);
+    comboBox.addItems(tables);
+    form.addRow(&comboBox);
+
+    QDialogButtonBox btnBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    form.addRow(&btnBox);
+
+    connect(&btnBox, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(&btnBox, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+
+    if (dialog.exec() == QDialog::Accepted) {
+        selectIndex = comboBox.currentIndex();
+        return true;
+    } else return false;
+}
+
+void MainWindow::showTable(QString& tableName) {
+    QDialog dialog(this);
+    dialog.setWindowTitle("Выбор таблицы");
+    dialog.setMinimumSize(180, 130);
+
+    QFormLayout form(&dialog);
+
+    QTableView tableView(&dialog);
+    tableView.setModel(dbservice.getModel(&dialog, tableName));
+    tableView.resizeColumnsToContents();
+    tableView.setEditTriggers(QAbstractItemView::NoEditTriggers);
+    tableView.verticalHeader()->setVisible(false);
+    form.addRow(&tableView);
+
+    dialog.resize(tableView.horizontalHeader()->length() + 50, 180);
+    dialog.exec();
+}
+
 void MainWindow::dbIsOpen() {
     if (dbservice.isOpen()) return;
 
@@ -146,7 +235,7 @@ void MainWindow::dbIsOpen() {
 void MainWindow::on_addHost_clicked()
 {
     BaseInfo tempInfo;
-    if (!dialogForm(tempInfo))
+    if (!addHostForm(tempInfo))
         return;
 
     if (!dbservice.addHost(tempInfo.info, tempInfo.ip, tempInfo.port))
@@ -184,6 +273,29 @@ void MainWindow::on_clearArchive_clicked()
         QMessageBox::critical(this, "Очистка archive", "Ошибка при очистке archive!");
 }
 
+void MainWindow::on_changeClearRules_clicked()
+{
+    int row = ui->InfoTable->currentRow();
+    if (row == -1) return;
+
+    Time time;
+    if (clearRuleForm(time)) {
+        QString retain_for = time.Get();
+        QMessageBox::information(this, "Изменение времени удаления метрик",
+                                "Успешное изменение времени удаления метрик!\nПолучено значение: " + retain_for);
+        dbservice.updateClearRules(hostList[row]->id, retain_for);
+    }
+}
+
+void MainWindow::on_selectTable_clicked()
+{
+    QVector<QString> namesTables = {"hosts", "host_status", "metrics", "clear_rules", "archive"};
+    int selectIndex;
+    if (selectTableForm(namesTables, selectIndex)) {
+        showTable(namesTables[selectIndex]);
+        return;
+    }
+}
 
 MainWindow::~MainWindow()
 {
@@ -196,3 +308,9 @@ void MainWindow::closeEvent(QCloseEvent *event) {
     QThreadPool::globalInstance()->waitForDone();
     QMainWindow::closeEvent(event);
 }
+
+
+
+
+
+
