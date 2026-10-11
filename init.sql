@@ -8,14 +8,17 @@ CREATE TABLE hosts(
 
 CREATE TABLE host_status(
 	hosts_id INT PRIMARY KEY REFERENCES hosts(hosts_id) ON DELETE CASCADE,	
-	down_since TIMESTAMPTZ DEFAULT NULL
+	down_since TIMESTAMPTZ DEFAULT NULL,
+	avg_latency REAL,
+	max_latency INT,
+	min_latency INT
 );
 
 CREATE TABLE metrics(
 	metrics_id SERIAL PRIMARY KEY,
 	hosts_id INT NOT NULL REFERENCES hosts(hosts_id) ON DELETE CASCADE,	
 	status BOOL NOT NULL,
-	latency BIGINT,
+	latency INT,
 	ts TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -30,6 +33,13 @@ CREATE TABLE archive(
 	ip INET NOT NULL,
 	port INT NOT NULL CHECK (port BETWEEN 1 AND 65535),	
 	status BOOL NOT NULL,
-	latency BIGINT,
+	latency INT,
 	ts TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE user_logs(
+	user_logs_id SERIAL PRIMARY KEY,
+	action_type TEXT,
+	ts TIMESTAMPTZ NOT NULL DEFAULT now(),
+	details TEXT
 );

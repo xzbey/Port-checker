@@ -26,11 +26,13 @@ public:
 
     bool addHost(const QString& info, const QHostAddress& ip, const quint16& port);
     bool removeHost(const int& hosts_id);
+    bool addUserAction(const QString& action, const QString& details);
 
     bool runCleanup();
 
     bool deleteMetrics();
     bool deleteArchive();
+    bool deleteUserLogs();
 
     bool updateClearRules(const int& hosts_id, const QString& retain_for);
 
@@ -50,10 +52,12 @@ private:
         insertHostsQuery,
         insertHostStatusQuery,
         insertClearRulesQuery,
+        insertUserLogsQuery,
         deleteHostsQuery,
         deleteMetricsForTimerQuery,
         deleteAllMetricsQuery,
-        deleteAllArchiveQuery;
+        deleteAllArchiveQuery,
+        deleteAllUserLogsQuery;
 };
 
 #endif // DBSERVICE_H

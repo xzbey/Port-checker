@@ -128,7 +128,9 @@ bool MainWindow::addHostForm(BaseInfo& outInfo) {
                            static_cast<quint16>(portEdit.value())
                         };
         return true;
-    } else return false;
+    }
+
+    return false;
 }
 
 bool MainWindow::clearRuleForm(Time& time) {
@@ -200,14 +202,17 @@ bool MainWindow::selectTableForm(QVector<QString>& tables, int& selectIndex) {
 
 void MainWindow::showTable(QString& tableName) {
     QDialog dialog(this);
-    dialog.setWindowTitle(tableName);
+    dialog.setWindowTitle(tableName + " (время в UTC)");
     dialog.setMinimumSize(180, 130);
 
     QFormLayout form(&dialog);
 
     QTableView tableView(&dialog);
     tableView.setModel(dbservice.getModel(&dialog, tableName));
+    tableView.setSortingEnabled(true);
+    tableView.sortByColumn(0, Qt::AscendingOrder);
     tableView.resizeColumnsToContents();
+    tableView.resizeRowsToContents();
     tableView.setEditTriggers(QAbstractItemView::NoEditTriggers);
     // tableView.verticalHeader()->setVisible(false);
     form.addRow(&tableView);
@@ -240,6 +245,9 @@ void MainWindow::on_addHost_clicked()
     if (!dbservice.addHost(tempInfo.info, tempInfo.ip, tempInfo.port))
         return;
 
+    dbservice.addUserAction("addHost",
+                            tempInfo.info + " | " + tempInfo.ip.toString() + ":" + QString::number(tempInfo.port));
+
     hostList = dbservice.loadHosts();
     setTable();
 }
@@ -249,7 +257,11 @@ void MainWindow::on_deleteHost_clicked()
     int row = ui->InfoTable->currentRow();
     if (row == -1) return;
 
-    dbservice.removeHost(hostList[row]->id);
+    if (!dbservice.removeHost(hostList[row]->id))
+        return;
+
+    dbservice.addUserAction("removeHost",
+                            hostList[row]->info + " | " + hostList[row]->ip.toString() + ":" + QString::number(hostList[row]->port));
 
     hostList = dbservice.loadHosts();
     setTable();
@@ -257,8 +269,10 @@ void MainWindow::on_deleteHost_clicked()
 
 void MainWindow::on_clearMetrics_clicked()
 {
-    if (dbservice.deleteMetrics())
-        QMessageBox::information(this, "Очистка metrics", "Успешная очистка metrics!");
+    if (dbservice.deleteMetrics()) {
+        dbservice.addUserAction("clearMetrics", "");
+        QMessageBox::information(this, "Очистка metrics", "Успешная очистка metrics!");    
+    }
     else
         QMessageBox::critical(this, "Очистка metrics", "Ошибка при очистке metrics!");
 }
@@ -266,10 +280,20 @@ void MainWindow::on_clearMetrics_clicked()
 
 void MainWindow::on_clearArchive_clicked()
 {
-    if (dbservice.deleteArchive())
+    if (dbservice.deleteArchive()) {
+        dbservice.addUserAction("clearArchive", "");
         QMessageBox::information(this, "Очистка archive", "Успешная очистка archive!");
+    }
     else
         QMessageBox::critical(this, "Очистка archive", "Ошибка при очистке archive!");
+}
+
+void MainWindow::on_clearUserLogs_clicked()
+{
+    if (dbservice.deleteUserLogs())
+        QMessageBox::information(this, "Очистка user_logs", "Успешная очистка user_logs!");
+    else
+        QMessageBox::critical(this, "Очистка user_logs", "Ошибка при очистке user_logs!");
 }
 
 void MainWindow::on_changeClearRules_clicked()
@@ -281,9 +305,12 @@ void MainWindow::on_changeClearRules_clicked()
     if (clearRuleForm(time)) {
         QString retain_for = time.Get();
 
-        if (dbservice.updateClearRules(hostList[row]->id, retain_for))
+        if (dbservice.updateClearRules(hostList[row]->id, retain_for)) {
+            dbservice.addUserAction("changeClearRules",
+                                    "id " + QString::number(hostList[row]->id) + ", time changed to " + retain_for);
             QMessageBox::information(this, "Изменение времени удаления метрик",
                                            "Успешное изменение времени удаления метрик!\nПолучено значение: " + retain_for);
+        }
         else
             QMessageBox::critical(this, "Изменение времени удаления метрик",
                                         "Ошибка при изменении времени удаления метрик!\nПолучено значение: " + retain_for);
@@ -292,9 +319,10 @@ void MainWindow::on_changeClearRules_clicked()
 
 void MainWindow::on_selectTable_clicked()
 {
-    QVector<QString> namesTables = {"hosts", "host_status", "metrics", "clear_rules", "archive"};
+    QVector<QString> namesTables = {"hosts", "host_status", "metrics", "clear_rules", "archive", "user_logs"};
     int selectIndex;
     if (selectTableForm(namesTables, selectIndex)) {
+        dbservice.addUserAction("showTable", "check " + namesTables[selectIndex] + " table");
         showTable(namesTables[selectIndex]);
         return;
     }
@@ -311,9 +339,4 @@ void MainWindow::closeEvent(QCloseEvent *event) {
     QThreadPool::globalInstance()->waitForDone();
     QMainWindow::closeEvent(event);
 }
-
-
-
-
-
 

@@ -46,9 +46,33 @@ bool DBService::createQueries() {
     updateHostStatusQuery = QSqlQuery(db);
     if (!updateHostStatusQuery.prepare("UPDATE host_status "
                                        "SET down_since = CASE "
-                                       "WHEN :status THEN NULL "
-                                       "ELSE COALESCE(down_since, NOW()) "
-                                       "END "
+                                       "        WHEN :status THEN NULL "
+                                       "        ELSE COALESCE(down_since, NOW()) "
+                                       "        END, "
+
+                                       "    avg_latency = CASE "
+                                       "        WHEN :status THEN ("
+                                       "            SELECT ROUND(AVG(m.latency), 2) "
+                                       "            FROM metrics m "
+                                       "            WHERE m.hosts_id = :hosts_id AND m.status = True"
+                                       "        ) ELSE NULL"
+                                       "        END, "
+
+                                       "    max_latency = CASE"
+                                       "        WHEN :status THEN ("
+                                       "            SELECT MAX(m.latency) "
+                                       "            FROM metrics m "
+                                       "            WHERE m.hosts_id = :hosts_id AND m.status = True"
+                                       "        ) ELSE NULL"
+                                       "        END, "
+
+                                       "    min_latency = CASE"
+                                       "        WHEN :status THEN ("
+                                       "            SELECT MIN(m.latency) "
+                                       "            FROM metrics m "
+                                       "            WHERE m.hosts_id = :hosts_id AND m.status = True"
+                                       "        ) ELSE NULL"
+                                       "        END "
                                        "WHERE hosts_id = :hosts_id")) {
         emit errorOccurred(updateHostStatusQuery.lastError().text());
         return false;
@@ -117,6 +141,13 @@ bool DBService::createQueries() {
         return false;
     }
 
+    insertUserLogsQuery = QSqlQuery(db);
+    if (!insertUserLogsQuery.prepare("INSERT INTO user_logs (action_type, details) "
+                                     "VALUES (:action_type, :details)")) {
+        emit errorOccurred(insertUserLogsQuery.lastError().text());
+        return false;
+    }
+
     deleteAllMetricsQuery = QSqlQuery(db);
     if (!deleteAllMetricsQuery.prepare("WITH moved AS ("
                                        "   DELETE FROM metrics m "
@@ -133,6 +164,12 @@ bool DBService::createQueries() {
     deleteAllArchiveQuery = QSqlQuery(db);
     if (!deleteAllArchiveQuery.prepare("DELETE FROM archive")) {
         emit errorOccurred(deleteAllArchiveQuery.lastError().text());
+        return false;
+    }
+
+    deleteAllUserLogsQuery = QSqlQuery(db);
+    if (!deleteAllUserLogsQuery.prepare("DELETE FROM user_logs")) {
+        emit errorOccurred(deleteAllUserLogsQuery.lastError().text());
         return false;
     }
 
@@ -218,6 +255,20 @@ bool DBService::removeHost(const int& hosts_id) {
     return db.commit();
 }
 
+bool DBService::addUserAction(const QString& action, const QString& details) {
+    db.transaction();
+
+    insertUserLogsQuery.bindValue(":action_type", action);
+    insertUserLogsQuery.bindValue(":details", details);
+    if (!insertUserLogsQuery.exec()) {
+        emit errorOccurred(insertUserLogsQuery.lastError().text());
+        db.rollback();
+        return false;
+    }
+
+    return db.commit();
+}
+
 bool DBService::runCleanup() {
     db.transaction();
 
@@ -245,6 +296,17 @@ bool DBService::deleteArchive() {
 
     if (!deleteAllArchiveQuery.exec()) {
         emit errorOccurred(deleteAllArchiveQuery.lastError().text());
+        db.rollback();
+        return false;
+    }
+    return db.commit();
+}
+
+bool DBService::deleteUserLogs() {
+    db.transaction();
+
+    if (!deleteAllUserLogsQuery.exec()) {
+        emit errorOccurred(deleteAllUserLogsQuery.lastError().text());
         db.rollback();
         return false;
     }
@@ -281,6 +343,7 @@ QSqlTableModel* DBService::getModel(QObject* parent, QString& tableName) {
     QSqlTableModel* model = new QSqlTableModel(parent, db);
     model->setTable(tableName);
     model->select();
+    // qDebug() << model->query().lastQuery();
 
     return model;
 }

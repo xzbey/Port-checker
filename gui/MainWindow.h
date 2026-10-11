@@ -50,6 +50,8 @@ private slots:
 
     void on_changeClearRules_clicked();
 
+    void on_clearUserLogs_clicked();
+
     void on_selectTable_clicked();
 
 private:
